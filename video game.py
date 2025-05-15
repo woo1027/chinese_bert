@@ -7,6 +7,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import itertools
 
 
 # 中文字體設定（如需）
@@ -39,59 +40,158 @@ print(game.isna().sum())
 game['發行年份'] = pd.to_numeric(game['發行年份'], errors='coerce')
 game['總銷售額'] = pd.to_numeric(game['總銷售額'], errors='coerce')
 game.dropna(subset=['發行年份', '總銷售額'], inplace=True)
+#
+#
+# # 類別特徵轉換
+# label_cols = ['平台', '遊戲類型', '發行商']
+# for col in label_cols:
+#     game[col] = LabelEncoder().fit_transform(game[col].astype(str))
+#
+# # 特徵與目標欄位
+# features = ['平台', '遊戲類型', '發行年份', '發行商']
+# X = game[features].values
+# y = game['總銷售額'].values.reshape(-1, 1)
+#
+#
+# # 特徵/目標標準化
+# scaler_X = StandardScaler()
+# scaler_y = StandardScaler()
+# X_scaled = scaler_X.fit_transform(X)
+# y_scaled = scaler_y.fit_transform(y)
+#
+#
+# # 資料切分
+# X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=42)
+#
+#
+# from sklearn.linear_model import LogisticRegression
+# from sklearn.neighbors import KNeighborsRegressor
+# from sklearn.tree import DecisionTreeRegressor
+# from sklearn.ensemble import RandomForestRegressor
+# from sklearn.svm import SVR
+# from xgboost import XGBRegressor
+#
+# models = {
+#     'K-Nearest Neighbors': KNeighborsRegressor(n_neighbors=5),
+#     'Decision Tree': DecisionTreeRegressor(random_state=42),
+#     'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42),
+#     'SVM': SVR(kernel='rbf'),
+#     'XGBoost': XGBRegressor(n_estimators=100, random_state=42)
+# }
+#
+# print("\n🔍 各模型預測表現：")
+# for name, model in models.items():
+#     model.fit(X_train, y_train.ravel())
+#     y_pred = model.predict(X_test)
+#
+#     # 反標準化
+#     y_pred = scaler_y.inverse_transform(y_pred.reshape(-1, 1))
+#     y_true = scaler_y.inverse_transform(y_test)
+#
+#     mse = mean_squared_error(y_true, y_pred)
+#     r2 = r2_score(y_true, y_pred)
+#     print(f"{name:<20} ➤ MSE: {mse:.2f}, R²: {r2:.2f}")
 
+
+
+features = ['平台', '遊戲類型', '發行年份', '發行商']
+target = ['總銷售額']
+
+mean_sales = game[target].mean()
+game['Best_Seller'] = (game[target] > mean_sales).astype(int)
 
 # 類別特徵轉換
+game = game[features + ['Best_Seller']].dropna()
 label_cols = ['平台', '遊戲類型', '發行商']
 for col in label_cols:
     game[col] = LabelEncoder().fit_transform(game[col].astype(str))
 
-# 特徵與目標欄位
-features = ['平台', '遊戲類型', '發行年份', '發行商']
-X = game[features].values
-y = game['總銷售額'].values.reshape(-1, 1)
+X = game[features]
+y = game['Best_Seller']
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-
-# 特徵/目標標準化
-scaler_X = StandardScaler()
-scaler_y = StandardScaler()
-X_scaled = scaler_X.fit_transform(X)
-y_scaled = scaler_y.fit_transform(y)
-
-
-# 資料切分
-X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=42)
-
-
+# 特徵標準化（對某些模型效果更好）
+scaler = StandardScaler()
+X_train_scaled = scaler.fit_transform(X_train)
+X_test_scaled = scaler.transform(X_test)
 
 from sklearn.linear_model import LogisticRegression
-from sklearn.neighbors import KNeighborsRegressor
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.svm import SVR
-from xgboost import XGBRegressor
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
+from xgboost import XGBClassifier
+from sklearn.metrics import confusion_matrix, classification_report, roc_auc_score, roc_curve
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import (
+    confusion_matrix, accuracy_score, precision_score,
+    recall_score, f1_score
+)
 
+
+# 6. 定義模型們
 models = {
-    'K-Nearest Neighbors': KNeighborsRegressor(n_neighbors=5),
-    'Decision Tree': DecisionTreeRegressor(random_state=42),
-    'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42),
-    'SVM': SVR(kernel='rbf'),
-    'XGBoost': XGBRegressor(n_estimators=100, random_state=42)
+    'Logistic Regression': LogisticRegression(),
+    'KNN': KNeighborsClassifier(n_neighbors=5),
+    'Decision Tree': DecisionTreeClassifier(max_depth=5),
+    'Random Forest': RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42),
+    'SVM': SVC(kernel='rbf', probability = True),
+    'XGBoost': XGBClassifier(n_estimators=100, random_state=42)
 }
 
-print("\n🔍 各模型預測表現：")
-for name, model in models.items():
-    model.fit(X_train, y_train.ravel())
-    y_pred = model.predict(X_test)
 
-    # 反標準化
-    y_pred = scaler_y.inverse_transform(y_pred.reshape(-1, 1))
-    y_true = scaler_y.inverse_transform(y_test)
+# 模型評估：混淆矩陣
+plt.figure(figsize=(15, 10))
+for i, (name, model) in enumerate(models.items()):
+    model.fit(X_train_scaled, y_train)
+    y_pred = model.predict(X_test_scaled)
 
-    mse = mean_squared_error(y_true, y_pred)
-    r2 = r2_score(y_true, y_pred)
-    print(f"{name:<20} ➤ MSE: {mse:.2f}, R²: {r2:.2f}")
+    # 混淆矩陣
+    cm = confusion_matrix(y_test, y_pred)
+    plt.subplot(2, 3, i + 1)
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+    plt.title(f'{name}\nConfusion Matrix')
+    plt.xlabel('Predicted')
+    plt.ylabel('Actual')
 
+    # 計算指標
+    acc = accuracy_score(y_test, y_pred)
+    prec = precision_score(y_test, y_pred, zero_division=0)
+    rec = recall_score(y_test, y_pred, zero_division=0)
+    f1 = f1_score(y_test, y_pred, zero_division=0)
+
+    # 顯示指標（註解在子圖下方）
+    plt.gca().text(0, -0.6,
+                   f'Acc: {acc:.2f}\nPrec: {prec:.2f}\nRec: {rec:.2f}\nF1: {f1:.2f}',
+                   fontsize=10, ha='left', transform=plt.gca().transAxes)
+plt.tight_layout()
+plt.show()
+
+# ROC 曲線
+# 選擇要跑的模型
+selected_models = {
+    'KNN': KNeighborsClassifier(n_neighbors=5),
+    'Decision Tree': DecisionTreeClassifier(max_depth=5),
+    'XGBoost': XGBClassifier(n_estimators=100, random_state=42)
+}
+plt.figure(figsize=(10, 8))
+
+for name, model in selected_models.items():
+    model.fit(X_train_scaled, y_train)
+    y_prob = model.predict_proba(X_test_scaled)[:, 1]  # 預測正類機率
+    fpr, tpr, _ = roc_curve(y_test, y_prob)
+    auc = roc_auc_score(y_test, y_prob)
+
+    plt.plot(fpr, tpr, label=f"{name} (AUC = {auc:.2f})")
+
+plt.plot([0, 1], [0, 1], 'k--')  # 參考線
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('ROC 曲線')
+plt.legend()
+plt.grid()
+plt.show()
 
 # # 每年銷售額
 # sales_by_year = game.groupby('發行年份', as_index=False)['總銷售額'].sum()
