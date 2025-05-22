@@ -1,33 +1,51 @@
-import kagglehub
+import pymssql
 import pandas as pd
-import os
-from sqlalchemy import create_engine
 
 
 
-# Download latest version
-path = kagglehub.dataset_download("supergus/multistage-continuousflow-manufacturing-process")
+# 建立連線
+conn = pymssql.connect(
+    server='192.168.0.104',
+    user='sa',
+    password='wu469711',
+    database='video games'
+)
 
+# 撰寫 SQL 查詢語句
+query = """
+SELECT 
+    l.student_id,
+    COUNT(DISTINCT l.login_time) AS login_count,
+    AVG(CAST(h.submitted AS FLOAT)) * 100 AS homework_completion_rate,
+    AVG(e.score) AS avg_exam_score
+FROM login_log l
+LEFT JOIN homework_submission h ON l.student_id = h.student_id
+LEFT JOIN exam_scores e ON l.student_id = e.student_id
+GROUP BY l.student_id;
+"""
 
-# 取得該資料夾中的所有檔案
-files = os.listdir(path)
-print(files)
+df = pd.read_sql(query, conn)
+conn.close()
 
-# 讀取一個 .csv 文件（假設其中一個叫 'process_data.csv'）
-df = pd.read_csv(os.path.join(path, "continuous_factory_process.csv"))
-print(df.head())
+from openpyxl import Workbook
+from openpyxl.styles import PatternFill
 
-# 替換以下資訊
-user = "sqlprostudio-ro"
-password = "Yes"
-host = "35.82.3.43"
-port = 3306
-database = "northwind"
+wb = Workbook()
+ws = wb.active
+ws.title = "Student Report"
 
-# 建立連線引擎
-engine = create_engine(f"mysql+pymysql://{user}:{password}@{host}:{port}/{database}")
+# 寫入標題列
+ws.append(["Student ID", "Login Count", "HW Completion (%)", "Avg Exam Score"])
 
-# 寫入資料（如果 table 已存在可以使用 if_exists='replace'）
-df.to_sql("process_data", con=engine, if_exists="replace", index=False)
+# 寫入數據
+for row in df.itertuples(index=False):
+    ws.append(list(row))
 
-print("✅ 寫入完成！")
+# 加入條件格式（例如低於60分標紅）
+for row in ws.iter_rows(min_row=2, min_col=4, max_col=4):
+    for cell in row:
+        if cell.value is not None and cell.value < 60:
+            cell.fill = PatternFill(start_color="FFC7CE", fill_type="solid")
+
+wb.save("student_weekly_report.xlsx")
+
